@@ -205,11 +205,13 @@ typedef struct {
 static ngx_int_t ngx_stream_upstream_check_add_timers(ngx_cycle_t *cycle);
 
 static ngx_int_t ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c);
+ ngx_int_t ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c);
 
 static void ngx_stream_upstream_check_begin_handler(ngx_event_t *event);
 static void ngx_stream_upstream_check_connect_handler(ngx_event_t *event);
 
-static void ngx_stream_upstream_check_peek_handler(ngx_event_t *event);
+//static void ngx_stream_upstream_check_peek_handler(ngx_event_t *event);
+ void ngx_stream_upstream_check_peek_handler(ngx_event_t *event);
 
 static void ngx_stream_upstream_check_send_handler(ngx_event_t *event);
 static void ngx_stream_upstream_check_recv_handler(ngx_event_t *event);
@@ -274,7 +276,8 @@ static ngx_int_t ngx_stream_upstream_check_addr_change_port(ngx_pool_t *pool,
 
 static ngx_check_conf_t *ngx_http_get_check_type_conf(ngx_str_t *str);
 
-static char *ngx_stream_upstream_check(ngx_conf_t *cf,
+//static char *ngx_stream_upstream_check(ngx_conf_t *cf,
+ char *ngx_stream_upstream_check(ngx_conf_t *cf,
                                        ngx_command_t *cmd, void *conf);
 static char *ngx_stream_upstream_check_keepalive_requests(ngx_conf_t *cf,
                                                           ngx_command_t *cmd, void *conf);
@@ -644,7 +647,7 @@ ngx_stream_upstream_check_add_timers(ngx_cycle_t *cycle)
     }
 
     ngx_log_debug2(NGX_LOG_DEBUG_STREAM, cycle->log, 0,
-                   "http check upstream init_process, shm_name: %V, "
+                   "stream check upstream init_process, shm_name: %V, "
                            "peer number: %ud",
                    &peers->check_shm_name,
                    peers->peers.nelts);
@@ -736,7 +739,7 @@ ngx_stream_upstream_check_begin_handler(ngx_event_t *event)
 
     interval = ngx_current_msec - peer->shm->access_time;
     ngx_log_debug5(NGX_LOG_DEBUG_STREAM, event->log, 0,
-                   "http check begin handler index: %ui, owner: %P, "
+                   "stream check begin handler index: %ui, owner: %P, "
                            "ngx_pid: %P, interval: %M, check_interval: %M",
                    peer->index, peer->shm->owner,
                    ngx_pid, interval,
@@ -853,7 +856,7 @@ ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c)
     err = ngx_socket_errno;
 
     ngx_log_debug2(NGX_LOG_DEBUG_STREAM, c->log, err,
-                   "http check upstream recv(): %i, fd: %d",
+                   "stream check upstream recv(): %i, fd: %d",
                    n, c->fd);
 
     if (n == 1 || (n == -1 && err == NGX_EAGAIN)) {
@@ -863,7 +866,8 @@ ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c)
     }
 }
 
-static void
+//static void
+ void
 ngx_stream_upstream_check_peek_handler(ngx_event_t *event)
 {
     ngx_connection_t               *c;
@@ -962,7 +966,7 @@ ngx_stream_upstream_check_send_handler(ngx_event_t *event)
     c = event->data;
     peer = c->data;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "http check send.");
+    ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "stream check send.");
 
     if (c->pool == NULL) {
         ngx_log_error(NGX_LOG_ERR, event->log, 0,
@@ -1015,7 +1019,7 @@ ngx_stream_upstream_check_send_handler(ngx_event_t *event)
 
         err = (size >=0) ? 0 : ngx_socket_errno;
         ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, err,
-                       "http check send size: %z, total: %z",
+                       "stream check send size: %z, total: %z",
                        size, ctx->send.last - ctx->send.pos);
         }
 #endif
@@ -1031,7 +1035,7 @@ ngx_stream_upstream_check_send_handler(ngx_event_t *event)
     }
 
     if (ctx->send.pos == ctx->send.last) {
-        ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "http check send done.");
+        ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "stream check send done.");
         peer->state = NGX_HTTP_CHECK_SEND_DONE;
         c->requests++;
     }
@@ -1111,7 +1115,7 @@ ngx_stream_upstream_check_recv_handler(ngx_event_t *event)
 
         err = (size >= 0) ? 0 : ngx_socket_errno;
         ngx_log_debug2(NGX_LOG_DEBUG_STREAM, c->log, err,
-                       "http check recv size: %z, peer: %V ",
+                       "stream check recv size: %z, peer: %V ",
                        size, &peer->check_peer_addr->name);
         }
 #endif
@@ -1130,7 +1134,7 @@ ngx_stream_upstream_check_recv_handler(ngx_event_t *event)
     rc = peer->parse(peer);
 
     ngx_log_debug2(NGX_LOG_DEBUG_STREAM, c->log, 0,
-                   "http check parse rc: %i, peer: %V ",
+                   "stream check parse rc: %i, peer: %V ",
                    rc, &peer->check_peer_addr->name);
 
     switch (rc) {
@@ -1512,7 +1516,7 @@ ngx_stream_upstream_check_clean_event(ngx_stream_upstream_check_peer_t *peer)
 
     if (c) {
         ngx_log_debug2(NGX_LOG_DEBUG_STREAM, c->log, 0,
-                       "http check clean event: index:%i, fd: %d",
+                       "stream check clean event: index:%i, fd: %d",
                        peer->index, c->fd);
         if (c->error == 0 &&
             cf->need_keepalive &&
@@ -1653,7 +1657,8 @@ ngx_http_get_check_type_conf(ngx_str_t *str)
     return NULL;
 }
 
-static char *
+//static char * 
+ char * /* for debug */
 ngx_stream_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_str_t                           *value, s;
@@ -1671,7 +1676,7 @@ ngx_stream_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
-    ucscf = ngx_http_conf_get_module_srv_conf(cf,
+    ucscf = ngx_stream_conf_get_module_srv_conf(cf,
                                               ngx_stream_upstream_check_module);
     if (ucscf == NULL) {
         return NGX_CONF_ERROR;
@@ -2445,7 +2450,7 @@ ngx_stream_upstream_check_status(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     if (cf->args->nelts == 2) {
         uclcf = ngx_http_conf_get_module_loc_conf(cf,
-                                              ngx_stream_upstream_check_module);
+                                              ngx_stream_upstream_check_status_module);
 
         uclcf->format = ngx_http_get_check_status_format_conf(&value[1]);
         if (uclcf->format == NULL) {
