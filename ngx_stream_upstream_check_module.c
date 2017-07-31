@@ -411,8 +411,8 @@ static ngx_check_conf_t  ngx_check_types[] = {
                 NULL,
                 NULL,
                 NULL,
-                0,
-                1 },
+                0,   //zhoucx: need_pool ?
+                0 }, //zhoucx: need_keepalive ? i change it to no
 
         { NGX_HTTP_CHECK_HTTP,
                 ngx_string("http"),
@@ -2038,6 +2038,9 @@ ngx_stream_upstream_check_init_srv_conf(ngx_conf_t *cf, void *conf)
 
     if (check) {
         //todo(zhocux): what's mean?
+        ucscf->send.data = check->default_send.data;
+        ucscf->send.len = check->default_send.len;
+        //for http 
         if (ucscf->code.status_alive == 0) {
             ucscf->code.status_alive = check->default_status_alive;
         }
