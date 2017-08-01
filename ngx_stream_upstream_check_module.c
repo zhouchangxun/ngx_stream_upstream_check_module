@@ -55,7 +55,7 @@ typedef struct {
 
 typedef struct {
     ngx_uint_t                               generation;
-    ngx_uint_t                               checksum;
+    ngx_uint_t                               checksum;//zhoucx: we can know if peer config file changed by calculate it.
     ngx_uint_t                               number;
 
     /* ngx_stream_upstream_check_status_peer_t */
@@ -439,7 +439,7 @@ static ngx_check_conf_t  ngx_check_types[] = {
                 0 }
 };
 
-static ngx_uint_t ngx_stream_upstream_check_shm_generation = 0;
+static ngx_uint_t ngx_stream_upstream_check_shm_generation = 0; //zhoucx: what's mean?
 static ngx_stream_upstream_check_peers_t *check_peers_ctx = NULL;
 
 
@@ -728,7 +728,7 @@ ngx_stream_upstream_check_begin_handler(ngx_event_t *event)
     peer = event->data;
     ucscf = peer->conf;
 
-    ngx_add_timer(event, ucscf->check_interval / 2);
+    ngx_add_timer(event, ucscf->check_interval / 2);//zhoucx: what's mean?
 
     /* This process is processing this peer now. */
     if ((peer->shm->owner == ngx_pid  ||
@@ -738,10 +738,10 @@ ngx_stream_upstream_check_begin_handler(ngx_event_t *event)
     }
 
     interval = ngx_current_msec - peer->shm->access_time;
-    ngx_log_debug5(NGX_LOG_DEBUG_STREAM, event->log, 0,
-                   "stream check begin handler index: %ui, owner: %P, "
-                           "ngx_pid: %P, interval: %M, check_interval: %M",
-                   peer->index, peer->shm->owner,
+    ngx_log_debug6(NGX_LOG_DEBUG_STREAM, event->log, 0,
+                   "stream check begin handler for (%V): index: %ui, owner: %P, "
+                           "ngx_pid: %P, current interval: %M, check_interval: %M",
+                   &peer->check_peer_addr->name, peer->index, peer->shm->owner,
                    ngx_pid, interval,
                    ucscf->check_interval);
 
@@ -837,7 +837,7 @@ ngx_stream_upstream_check_connect_handler(ngx_event_t *event)
     c->write->handler = peer->send_handler;
     c->read->handler = peer->recv_handler;
 
-    ngx_add_timer(&peer->check_timeout_ev, ucscf->check_timeout);
+    ngx_add_timer(&peer->check_timeout_ev, ucscf->check_timeout);//zhoucx: start connect timeout timer.
 
     /* The kqueue's loop interface needs it. */
     if (rc == NGX_OK) {
@@ -1594,7 +1594,7 @@ ngx_stream_upstream_check_clear_all_events()
     ngx_stream_upstream_check_peer_t  *peer;
     ngx_stream_upstream_check_peers_t *peers;
 
-    static ngx_flag_t                has_cleared = 0;
+    static ngx_flag_t                has_cleared = 0; //zhoucx: note! this static var.
 
     if (has_cleared || check_peers_ctx == NULL) {
         return;
@@ -1812,7 +1812,7 @@ ngx_stream_upstream_check_keepalive_requests(ngx_conf_t *cf, ngx_command_t *cmd,
 
     value = cf->args->elts;
 
-    ucscf = ngx_http_conf_get_module_srv_conf(cf,
+    ucscf = ngx_stream_conf_get_module_srv_conf(cf,
                                               ngx_stream_upstream_check_module);
 
     requests = ngx_atoi(value[1].data, value[1].len);
@@ -1835,7 +1835,7 @@ ngx_stream_upstream_check_http_send(ngx_conf_t *cf, ngx_command_t *cmd,
 
     value = cf->args->elts;
 
-    ucscf = ngx_http_conf_get_module_srv_conf(cf,
+    ucscf = ngx_stream_conf_get_module_srv_conf(cf,
                                               ngx_stream_upstream_check_module);
 
     ucscf->send = value[1];
@@ -1859,7 +1859,7 @@ ngx_stream_upstream_check_http_expect_alive(ngx_conf_t *cf, ngx_command_t *cmd,
     value = cf->args->elts;
     mask = ngx_check_http_expect_alive_masks;
 
-    ucscf = ngx_http_conf_get_module_srv_conf(cf,
+    ucscf = ngx_stream_conf_get_module_srv_conf(cf,
                                               ngx_stream_upstream_check_module);
     bit = ucscf->code.status_alive;
 
@@ -1903,7 +1903,7 @@ ngx_stream_upstream_check_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *con
     ngx_str_t                            *value;
     ngx_stream_upstream_check_main_conf_t  *ucmcf;
 
-    ucmcf = ngx_http_conf_get_module_main_conf(cf,
+    ucmcf = ngx_stream_conf_get_module_main_conf(cf,
                                                ngx_stream_upstream_check_module);
     if (ucmcf->check_shm_size) {
         return "is duplicate";
@@ -1919,7 +1919,7 @@ ngx_stream_upstream_check_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *con
     return NGX_CONF_OK;
 }
 
-
+//zhoucx: alloc memory for config struct.
 static void *
 ngx_stream_upstream_check_create_main_conf(ngx_conf_t *cf)
 {
@@ -1960,7 +1960,7 @@ ngx_stream_upstream_check_init_main_conf(ngx_conf_t *cf, void *conf)
     uscfp = umcf->upstreams.elts;
 
     ngx_log_error(NGX_LOG_INFO, cf->log, 0,
-                       "init  stream check main confstream upstream check, peers size:%ui", 
+                       "init  stream check main conf. stream upstream check, upstreams size:%ui", 
                        umcf->upstreams.nelts);
     for (i = 0; i < umcf->upstreams.nelts; i++) {
 
@@ -2058,7 +2058,7 @@ ngx_stream_upstream_check_init_shm(ngx_conf_t *cf, void *conf)
     ngx_shm_zone_t                       *shm_zone;
     ngx_stream_upstream_check_main_conf_t  *ucmcf = conf;
 
-    ngx_log_debug1(NGX_LOG_DEBUG, cf->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_STREAM, cf->log, 0,
                        "stream upstream check, peers size:%ui", 
                        ucmcf->peers->peers.nelts); 
     if (ucmcf->peers->peers.nelts > 0) {
@@ -2165,7 +2165,7 @@ ngx_stream_upstream_check_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         }
     }
 
-    if (!same) {
+    if (!same) { //zhoucx: upstream config has changed.
 
         if (ngx_stream_upstream_check_shm_generation > 1) {
 
