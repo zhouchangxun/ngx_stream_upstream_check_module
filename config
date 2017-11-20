@@ -1,4 +1,4 @@
-#zhoucx: my module config script
+#module config script
 
 ngx_addon_name=ngx_stream_upstream_check_module
 ngx_feature_path="$ngx_addon_dir"
@@ -23,7 +23,7 @@ else
   HTTP_MODULES="$HTTP_MODULES ngx_stream_upstream_check_status_module"
   CORE_INCS="$CORE_INCS $ngx_feature_path"
   NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_feature_deps"
-  NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_check_src"
+  NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_feature_src"
 fi
 
 #end

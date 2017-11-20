@@ -80,6 +80,7 @@ struct ngx_stream_upstream_check_peer_s {
     ngx_flag_t                               state;
     ngx_pool_t                              *pool;
     ngx_uint_t                               index;
+    char                                    *device; //zhoucx: bind check socket to this device.
     ngx_uint_t                               max_busy;
     ngx_str_t                               *upstream_name;
     ngx_addr_t                              *check_peer_addr;
@@ -112,6 +113,7 @@ typedef struct {
 
 #define NGX_HTTP_CHECK_TCP                   0x0001
 #define NGX_HTTP_CHECK_HTTP                  0x0002
+#define NGX_HTTP_CHECK_UDP                   0x0004
 
 
 #define NGX_CHECK_HTTP_2XX                   0x0002
@@ -205,13 +207,11 @@ typedef struct {
 static ngx_int_t ngx_stream_upstream_check_add_timers(ngx_cycle_t *cycle);
 
 static ngx_int_t ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c);
- ngx_int_t ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c);
 
 static void ngx_stream_upstream_check_begin_handler(ngx_event_t *event);
 static void ngx_stream_upstream_check_connect_handler(ngx_event_t *event);
 
-//static void ngx_stream_upstream_check_peek_handler(ngx_event_t *event);
- void ngx_stream_upstream_check_peek_handler(ngx_event_t *event);
+static void ngx_stream_upstream_check_peek_handler(ngx_event_t *event);
 
 static void ngx_stream_upstream_check_send_handler(ngx_event_t *event);
 static void ngx_stream_upstream_check_recv_handler(ngx_event_t *event);
@@ -244,8 +244,7 @@ static ngx_int_t ngx_stream_upstream_check_need_exit();
 static void ngx_stream_upstream_check_clear_all_events();
 
 //begin check_status function declare
-//static ngx_int_t ngx_stream_upstream_check_status_handler(
- ngx_int_t ngx_stream_upstream_check_status_handler(
+static ngx_int_t ngx_stream_upstream_check_status_handler(
     ngx_http_request_t *r);
 static void ngx_stream_upstream_check_status_parse_args(ngx_http_request_t *r,
     ngx_stream_upstream_check_status_ctx_t *ctx);
@@ -276,8 +275,7 @@ static ngx_int_t ngx_stream_upstream_check_addr_change_port(ngx_pool_t *pool,
 
 static ngx_check_conf_t *ngx_http_get_check_type_conf(ngx_str_t *str);
 
-//static char *ngx_stream_upstream_check(ngx_conf_t *cf,
- char *ngx_stream_upstream_check(ngx_conf_t *cf,
+static char *ngx_stream_upstream_check(ngx_conf_t *cf,
                                        ngx_command_t *cmd, void *conf);
 static char *ngx_stream_upstream_check_keepalive_requests(ngx_conf_t *cf,
                                                           ngx_command_t *cmd, void *conf);
@@ -413,7 +411,18 @@ static ngx_check_conf_t  ngx_check_types[] = {
                 NULL,
                 0,   //zhoucx: need_pool ?
                 0 }, //zhoucx: need_keepalive ? i change it to no
-
+        { NGX_HTTP_CHECK_UDP,
+                ngx_string("udp"),
+                ngx_string("X"),/* zhoucx: default send data.
+                                 (we must send some data and then call recv to trigger icmp error response).*/
+                0,
+                ngx_stream_upstream_check_send_handler,
+                ngx_stream_upstream_check_peek_handler,
+                ngx_stream_upstream_check_http_init,
+                NULL,
+                ngx_stream_upstream_check_http_reinit,
+                1,
+                0 },
         { NGX_HTTP_CHECK_HTTP,
                 ngx_string("http"),
                 ngx_string("GET / HTTP/1.0\r\n\r\n"),
@@ -445,7 +454,7 @@ static ngx_stream_upstream_check_peers_t *check_peers_ctx = NULL;
 
 ngx_uint_t
 ngx_stream_upstream_check_add_peer(ngx_conf_t *cf,
-                                   ngx_stream_upstream_srv_conf_t *us, ngx_addr_t *peer_addr)
+                                   ngx_stream_upstream_srv_conf_t *us, ngx_addr_t *peer_addr, char *device_name)
 {
     ngx_stream_upstream_check_peer_t       *peer;
     ngx_stream_upstream_check_peers_t      *peers;
@@ -481,6 +490,7 @@ ngx_stream_upstream_check_add_peer(ngx_conf_t *cf,
     peer->conf = ucscf;
     peer->upstream_name = &us->host;
     peer->peer_addr = peer_addr;
+    peer->device = device_name;
 
     if (ucscf->port) {
         peer->check_peer_addr = ngx_pcalloc(cf->pool, sizeof(ngx_addr_t));
@@ -807,6 +817,11 @@ ngx_stream_upstream_check_connect_handler(ngx_event_t *event)
     peer->pc.sockaddr = peer->check_peer_addr->sockaddr;
     peer->pc.socklen = peer->check_peer_addr->socklen;
     peer->pc.name = &peer->check_peer_addr->name;
+    peer->pc.type = (ucscf->check_type_conf->type==NGX_HTTP_CHECK_UDP)?SOCK_DGRAM:SOCK_STREAM;
+
+#if (NGX_HAVE_BINDTODEVICE)
+    peer->pc.device = peer->device;
+#endif
 
     peer->pc.get = ngx_event_get_peer;
     peer->pc.log = event->log;
@@ -831,6 +846,14 @@ ngx_stream_upstream_check_connect_handler(ngx_event_t *event)
     c->write->log = c->log;
     c->pool = peer->pool;
 
+	//zhoucx: set sock opt "IP_RECVERR" in order to recv icmp error like host unreachable.
+    int val = 1;
+    if( setsockopt( c->fd, SOL_IP, IP_RECVERR, &val, sizeof(val) ) == -1 ){
+        ngx_log_error(NGX_LOG_ERR, event->log, 0,
+              "setsockopt(IP_RECVERR) failed with peer: %V ",
+              &peer->check_peer_addr->name);
+    }
+
     upstream_check_connect_done:
     peer->state = NGX_HTTP_CHECK_CONNECT_DONE;
 
@@ -841,7 +864,7 @@ ngx_stream_upstream_check_connect_handler(ngx_event_t *event)
 
     /* The kqueue's loop interface needs it. */
     if (rc == NGX_OK) {
-        c->write->handler(c->write);
+        c->write->handler(c->write); //zhoucx: it is check_type->send_handler.
     }
 }
 
@@ -866,8 +889,7 @@ ngx_stream_upstream_check_peek_one_byte(ngx_connection_t *c)
     }
 }
 
-//static void
- void
+static void
 ngx_stream_upstream_check_peek_handler(ngx_event_t *event)
 {
     ngx_connection_t               *c;
@@ -1554,13 +1576,24 @@ ngx_stream_upstream_check_timeout_handler(ngx_event_t *event)
     }
 
     peer = event->data;
-    peer->pc.connection->error = 1;
 
-    ngx_log_error(NGX_LOG_ERR, event->log, 0,
-                  "check time out with peer: %V ",
+	if(peer->pc.type == SOCK_STREAM){
+	    peer->pc.connection->error = 1;
+
+	    ngx_log_error(NGX_LOG_ERR, event->log, 0,
+                  "tcp check time out with peer: %V ,set it down.",
                   &peer->check_peer_addr->name);
 
-    ngx_stream_upstream_check_status_update(peer, 0);
+        ngx_stream_upstream_check_status_update(peer, 0);
+	}else if(peer->pc.type == SOCK_DGRAM){
+	    peer->pc.connection->error = 0;
+
+	    ngx_log_error(NGX_LOG_INFO, event->log, 0,
+                  "udp check time out with peer: %V, we assum it's up :) ",
+                  &peer->check_peer_addr->name);
+
+        ngx_stream_upstream_check_status_update(peer, 1);
+	}
     ngx_stream_upstream_check_clean_event(peer);
 }
 
@@ -1657,8 +1690,7 @@ ngx_http_get_check_type_conf(ngx_str_t *str)
     return NULL;
 }
 
-//static char * 
- char * /* for debug */
+static char * 
 ngx_stream_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_str_t                           *value, s;
@@ -1787,7 +1819,7 @@ ngx_stream_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ucscf->default_down = default_down;
 
     if (ucscf->check_type_conf == NGX_CONF_UNSET_PTR) {
-        ngx_str_set(&s, "tcp");
+        ngx_str_set(&s, "tcp"); //zhoucx: default check type is "tcp".
         ucscf->check_type_conf = ngx_http_get_check_type_conf(&s);
     }
 
@@ -2524,8 +2556,7 @@ static ngx_check_status_command_t ngx_check_status_commands[] =  {
     { ngx_null_string, NULL }
 };
 //http request hander.
-//static ngx_int_t
- ngx_int_t
+static ngx_int_t
 ngx_stream_upstream_check_status_handler(ngx_http_request_t *r)
 {
     size_t                                 buffer_size;
@@ -2535,8 +2566,7 @@ ngx_stream_upstream_check_status_handler(ngx_http_request_t *r)
     ngx_stream_upstream_check_peers_t       *peers;
     ngx_stream_upstream_check_loc_conf_t    *uclcf;
     ngx_stream_upstream_check_status_ctx_t  *ctx;
-//zhoucx
-    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "enter l4 status get hander");
+
     if (r->method != NGX_HTTP_GET && r->method != NGX_HTTP_HEAD) {
         return NGX_HTTP_NOT_ALLOWED;
     }
