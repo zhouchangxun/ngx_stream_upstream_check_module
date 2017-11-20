@@ -1,7 +1,7 @@
 # ngx_stream_upstream_check_module
 a addon module for nginx that support stream upstream health check and provide a http interface to get backend-server status"
 
-该模块可以为Nginx提供主动式后端服务器健康检查的功能。
+该模块可以为Nginx提供主动式后端服务器健康检查的功能（检查类型支持 tcp/udp/http ）。
 
 # 编译
 
@@ -29,11 +29,11 @@ stream {
     }
     server {
         listen 80;
-        proxy_pass http://cluster1;
+        proxy_pass cluster1;
     }
     server {
         listen 8080;
-        proxy_pass http://cluster2;
+        proxy_pass cluster2;
     }
 }
 
