@@ -1,6 +1,6 @@
 # ngx_stream_upstream_check_module
 
-A addon module for nginx that support stream upstream health check ,
+support stream upstream health check (tcp/udp/http),
 and provide a http interface to get backend-server status"
 
 该模块可以为Nginx提供主动式后端服务器健康检查的功能（检查类型支持 tcp/udp/http ）。
@@ -59,7 +59,7 @@ http {
     server {
         listen 80;
         location /status {
-            check_l4status;
+            l4check_status;
             access_log   off;
             allow SOME.IP.ADD.RESS;
             deny all;
@@ -137,9 +137,9 @@ Context: stream/upstream
 所有的后端服务器健康检查状态都存于共享内存中，该指令可以设置共享内存的大小。默认是1M，如果你有1千台以上的服务器并在配置的时候出现了错误，就可能需要扩大该内存的大小。
 
 
-Syntax: check_l4status [html|csv|json]
+Syntax: l4check_status [html|csv|json]
 
-Default: check_l4status html
+Default: l4check_status html
 
 Context: http/server/location
 
