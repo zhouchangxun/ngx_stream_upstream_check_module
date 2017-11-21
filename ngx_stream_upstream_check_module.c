@@ -48,7 +48,7 @@ typedef struct {
     socklen_t                                socklen;
 
     ngx_atomic_t                             down;
-
+    ngx_str_t                               *upstream_name;
     u_char                                   padding[64];
 } ngx_stream_upstream_check_peer_shm_t;
 
@@ -304,12 +304,12 @@ static ngx_shm_zone_t *ngx_shared_memory_find(ngx_cycle_t *cycle,
                                               ngx_str_t *name, void *tag);
 static ngx_stream_upstream_check_peer_shm_t *
 ngx_stream_upstream_check_find_shm_peer(ngx_stream_upstream_check_peers_shm_t *peers_shm,
-                                        ngx_addr_t *addr);
+                                        ngx_addr_t *addr, ngx_str_t *upstream_name);
 
 static ngx_int_t ngx_stream_upstream_check_init_shm_peer(
         ngx_stream_upstream_check_peer_shm_t *peer_shm,
         ngx_stream_upstream_check_peer_shm_t *opeer_shm,
-        ngx_uint_t init_down, ngx_pool_t *pool, ngx_str_t *peer_name);
+        ngx_uint_t init_down, ngx_pool_t *pool, ngx_str_t *peer_name, ngx_str_t *upstream_name);
 
 static ngx_int_t ngx_stream_upstream_check_init_shm_zone(
         ngx_shm_zone_t *shm_zone, void *data);
@@ -2264,14 +2264,14 @@ ngx_stream_upstream_check_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         if (opeers_shm) {
 
             opeer_shm = ngx_stream_upstream_check_find_shm_peer(opeers_shm,
-                                                                peer[i].peer_addr);
+                                                                peer[i].peer_addr, peer[i].upstream_name);
             if (opeer_shm) {
                 ngx_log_debug1(NGX_LOG_DEBUG_STREAM, shm_zone->shm.log, 0,
                                "stream upstream check, inherit opeer: %V ",
                                &peer[i].peer_addr->name);
 
                 rc = ngx_stream_upstream_check_init_shm_peer(peer_shm, opeer_shm,
-                                                             0, pool, &peer[i].peer_addr->name);
+                                                             0, pool, &peer[i].peer_addr->name, peer[i].upstream_name);
                 if (rc != NGX_OK) {
                     return NGX_ERROR;
                 }
@@ -2283,7 +2283,7 @@ ngx_stream_upstream_check_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         ucscf = peer[i].conf;
         rc = ngx_stream_upstream_check_init_shm_peer(peer_shm, NULL,
                                                      ucscf->default_down, pool,
-                                                     &peer[i].peer_addr->name);
+                                                     &peer[i].peer_addr->name, peer[i].upstream_name);
         if (rc != NGX_OK) {
             return NGX_ERROR;
         }
@@ -2345,7 +2345,7 @@ ngx_shared_memory_find(ngx_cycle_t *cycle, ngx_str_t *name, void *tag)
 
 static ngx_stream_upstream_check_peer_shm_t *
 ngx_stream_upstream_check_find_shm_peer(ngx_stream_upstream_check_peers_shm_t *p,
-                                        ngx_addr_t *addr)
+                                        ngx_addr_t *addr, ngx_str_t *upstream_name)
 {
     ngx_uint_t                          i;
     ngx_stream_upstream_check_peer_shm_t *peer_shm;
@@ -2358,8 +2358,12 @@ ngx_stream_upstream_check_find_shm_peer(ngx_stream_upstream_check_peers_shm_t *p
             continue;
         }
 
-        if (ngx_memcmp(addr->sockaddr, peer_shm->sockaddr, addr->socklen) == 0) {
-            return peer_shm;
+        if (ngx_memcmp(addr->sockaddr, peer_shm->sockaddr, addr->socklen)) {
+            continue;     
+        }
+		
+	if (ngx_strcmp(upstream_name->data, peer_shm->upstream_name->data) == 0) {
+	    return peer_shm;
         }
     }
 
@@ -2370,7 +2374,7 @@ ngx_stream_upstream_check_find_shm_peer(ngx_stream_upstream_check_peers_shm_t *p
 static ngx_int_t
 ngx_stream_upstream_check_init_shm_peer(ngx_stream_upstream_check_peer_shm_t *psh,
                                         ngx_stream_upstream_check_peer_shm_t *opsh, ngx_uint_t init_down,
-                                        ngx_pool_t *pool, ngx_str_t *name)
+                                        ngx_pool_t *pool, ngx_str_t *name, ngx_str_t *upstream_name)
 {
     u_char  *file;
 
@@ -2394,6 +2398,8 @@ ngx_stream_upstream_check_init_shm_peer(ngx_stream_upstream_check_peer_shm_t *ps
 
         psh->down         = init_down;
     }
+    
+    psh->upstream_name = upstream_name;
 
 #if (NGX_HAVE_ATOMIC_OPS)
 
