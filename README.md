@@ -1,39 +1,57 @@
 # ngx_stream_upstream_check_module
-a addon module for nginx that support stream upstream health check and provide a http interface to get backend-server status"
+
+A addon module for nginx that support stream upstream health check ,
+and provide a http interface to get backend-server status"
 
 该模块可以为Nginx提供主动式后端服务器健康检查的功能（检查类型支持 tcp/udp/http ）。
 
-# 编译
+# build
 
-配置编译选项的时候开启：
-> ./configure --add_module=/path/to/module-src/
+## apply patch
+> cd nginx-src/; git apply ../ngx_stream_upstream_check_module/nginx-stable-1.12+.patch
 
-# Examples
+## append option to enable this module
+> ./configure --with-stream --add_module=/path/to/module-src/
+
+## build and install
+>make && make install
+
+# config examples
 
 ``` python
 stream {
-    upstream cluster1 {
+    upstream tcp-cluster {
         # simple round-robin
-        server 192.168.0.1:80;
-        server 192.168.0.2:80;
-        check interval=3000 rise=2 fall=5 timeout=1000 default_down=true type=tcp;
+        server 192.168.0.1:22;
+        server 192.168.0.2:22;
+        check interval=3000 rise=2 fall=5 timeout=5000 default_down=true type=tcp;
     }
-    upstream cluster2 {
+    upstream udp-cluster {
         # simple round-robin
-        server 192.168.0.3:80;
-        server 192.168.0.4:80;
-        check interval=3000 rise=2 fall=5 timeout=1000 type=http;
+        server 192.168.0.3:53;
+        server 192.168.0.4:53;
+        check interval=3000 rise=2 fall=5 timeout=5000 default_down=true type=udp;
+    }
+    upstream http-cluster {
+        # simple round-robin
+        server 192.168.0.5:80;
+        server 192.168.0.6:80;
+        check interval=3000 rise=2 fall=5 timeout=5000 type=http;
         check_keepalive_requests 100;
         check_http_send "HEAD / HTTP/1.1\r\nConnection: keep-alive\r\n\r\n";
         check_http_expect_alive http_2xx http_3xx;
     }
     server {
-        listen 80;
-        proxy_pass cluster1;
+        listen 522;
+        proxy_pass tcp-cluster;
     }
     server {
-        listen 8080;
-        proxy_pass cluster2;
+        listen 53;
+        proxy_pass udp-cluster;
+    }
+    server {
+        listen 80;
+        proxy_pass http-cluster;
     }
 }
 
@@ -49,18 +67,18 @@ http {
     }
 }
 ```
-# 指令
+# directive
 
 Syntax: 
 > check interval=milliseconds [fall=count] [rise=count] [timeout=milliseconds] [default_down=true|false] [type=tcp|udp|http] [port=check_port]
 
-Default: 如果没有配置参数，默认值是：interval=30000 fall=5 rise=2 timeout=1000 default_down=true type=tcp
+Default: interval=30000 fall=5 rise=2 timeout=1000 default_down=true type=tcp
 
 Context: stream/upstream
 
 该指令可以打开后端服务器的健康检查功能。
 
-指令后面的参数意义是：
+## Detail description
 
 interval：向后端发送的健康检查包的间隔。
 
