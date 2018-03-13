@@ -7,11 +7,15 @@ and provide a http interface to get backend-server status"
 
 # build
 
-## apply patch
-> cd nginx-src/; git apply ../ngx_stream_upstream_check_module/nginx-stable-1.12+.patch
+## clone nginx code and this module code.
+>git clone https://github.com/zhouchangxun/nginx/nginx.git
+>git clone https://github.com/zhouchangxun/ngx_stream_upstream_check_module.git
+
+## apply patch to nginx source
+> cd nginx/; git apply ../ngx_stream_upstream_check_module/nginx-stable-1.12+.patch
 
 ## append option to enable this module
-> ./configure --with-stream --add_module=/path/to/module-src/
+> ./auto/configure --with-stream --add-module=../ngx_stream_upstream_check_module/
 
 ## build and install
 >make && make install
@@ -50,7 +54,7 @@ stream {
         proxy_pass udp-cluster;
     }
     server {
-        listen 80;
+        listen 8080;
         proxy_pass http-cluster;
     }
 }
@@ -60,9 +64,6 @@ http {
         listen 80;
         location /status {
             l4check_status;
-            access_log   off;
-            allow SOME.IP.ADD.RESS;
-            deny all;
         }
     }
 }

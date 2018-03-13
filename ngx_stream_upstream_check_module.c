@@ -80,7 +80,6 @@ struct ngx_stream_upstream_check_peer_s {
     ngx_flag_t                               state;
     ngx_pool_t                              *pool;
     ngx_uint_t                               index;
-    char                                    *device; //zhoucx: bind check socket to this device.
     ngx_uint_t                               max_busy;
     ngx_str_t                               *upstream_name;
     ngx_addr_t                              *check_peer_addr;
@@ -454,7 +453,7 @@ static ngx_stream_upstream_check_peers_t *check_peers_ctx = NULL;
 
 ngx_uint_t
 ngx_stream_upstream_check_add_peer(ngx_conf_t *cf,
-                                   ngx_stream_upstream_srv_conf_t *us, ngx_addr_t *peer_addr, char *device_name)
+                                   ngx_stream_upstream_srv_conf_t *us, ngx_addr_t *peer_addr)
 {
     ngx_stream_upstream_check_peer_t       *peer;
     ngx_stream_upstream_check_peers_t      *peers;
@@ -490,7 +489,6 @@ ngx_stream_upstream_check_add_peer(ngx_conf_t *cf,
     peer->conf = ucscf;
     peer->upstream_name = &us->host;
     peer->peer_addr = peer_addr;
-    peer->device = device_name;
 
     if (ucscf->port) {
         peer->check_peer_addr = ngx_pcalloc(cf->pool, sizeof(ngx_addr_t));
@@ -818,10 +816,6 @@ ngx_stream_upstream_check_connect_handler(ngx_event_t *event)
     peer->pc.socklen = peer->check_peer_addr->socklen;
     peer->pc.name = &peer->check_peer_addr->name;
     peer->pc.type = (ucscf->check_type_conf->type==NGX_HTTP_CHECK_UDP)?SOCK_DGRAM:SOCK_STREAM;
-
-#if (NGX_HAVE_BINDTODEVICE)
-    peer->pc.device = peer->device;
-#endif
 
     peer->pc.get = ngx_event_get_peer;
     peer->pc.log = event->log;

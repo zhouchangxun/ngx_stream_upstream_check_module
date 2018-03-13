@@ -8,7 +8,7 @@
 
 //add a backend server to health checker system.
 ngx_uint_t ngx_stream_upstream_check_add_peer(ngx_conf_t *cf,
-    ngx_stream_upstream_srv_conf_t *us, ngx_addr_t *peer, char *device_name);
+    ngx_stream_upstream_srv_conf_t *us, ngx_addr_t *peer);
 
 //get status of one backend . 
 ngx_uint_t ngx_stream_upstream_check_peer_down(ngx_uint_t index);
