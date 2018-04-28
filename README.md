@@ -5,6 +5,10 @@ and provide a http interface to get backend-server status"
 
 该模块可以为Nginx提供主动式后端服务器健康检查的功能（检查类型支持 tcp/udp/http ）。
 
+## See Also
+* [ngx_healthcheck_module](https://github.com/zhouchangxun/ngx_healthcheck_module)
+it support both http/stream's upstream healthcheck.
+
 # build
 
 ## clone nginx code and this module code.
